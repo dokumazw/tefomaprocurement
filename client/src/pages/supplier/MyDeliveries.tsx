@@ -10,6 +10,7 @@ import Pagination from '../../components/Pagination';
 import TableSkeleton from '../../components/TableSkeleton';
 import { DEFAULT_PAGE_SIZE, emptyPagination, parsePagination } from '../../lib/pagination';
 import { formatCurrency } from '../../lib/constants';
+import { personName } from '../../lib/people';
 import { SubmitInvoiceDrawer } from '../../components/InvoiceForm';
 
 const statusColors: any = {
@@ -314,7 +315,7 @@ export default function MyDeliveries() {
                   ? [{
                       label: 'Received',
                       value: new Date(selectedDelivery.createdAt).toLocaleDateString('en-ZA'),
-                      sub: `${selectedDelivery.receivedBy.firstName} ${selectedDelivery.receivedBy.lastName}`
+                      sub: personName(selectedDelivery.receivedBy) || undefined
                     }]
                   : [])
               ]}

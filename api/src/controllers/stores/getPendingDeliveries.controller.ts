@@ -1,16 +1,12 @@
 import type { Request, Response } from 'express';
 
 import { PurchaseOrder, Delivery } from '../../models/index.js';
+import { awaitingReceiptFilter } from '../../services/awaitingReceipt.service.js';
 
 const getPendingDeliveries = async (req: Request, res: Response): Promise<any> => {
   try {
-    // Get issued purchase orders that haven't been fully received
-    const query = {
-      status: { $in: ['issued', 'partially_received'] },
-      isDeleted: false
-    };
-
-    const purchaseOrders = await PurchaseOrder.find(query)
+    // Orders with goods still due; the dashboard and badge count the same.
+    const purchaseOrders = await PurchaseOrder.find(awaitingReceiptFilter())
       .populate('supplier', 'companyName contactEmail')
       .populate('createdBy', 'firstName lastName')
       .select('poNumber items totalAmount status expectedDeliveryDate issuedAt deliveryAddress supplier')

@@ -5,7 +5,10 @@ export const authAPI: any = {
   verifyOtp: (data: any) => http.post('/auth/verify-otp', data),
   register: (data: any) => http.post('/auth/register', data),
   getMe: () => http.get('/auth/me'),
-  logout: (token: string) => http.post('/auth/logout', null, { headers: { Authorization: `Bearer ${token}` } }),
+  // An empty object, not null: with the JSON content type axios sends null as
+  // the text "null", which the API's JSON reader refuses with a 400, so the
+  // session was never ended on the server.
+  logout: (token: string) => http.post('/auth/logout', {}, { headers: { Authorization: `Bearer ${token}` } }),
   updateProfile: (data: any) => http.put('/auth/profile', data),
   changePassword: (data: any) => http.put('/auth/change-password', data),
   forgotPassword: (data: any) => http.post('/auth/forgot-password', data),

@@ -502,6 +502,12 @@ export default function QuotationDetail() {
           const canSelect = role === 'procurement_officer' || procurementHead;
           const canPmAuthorize = procurementHead;
           const canApproveWaiver = procurementHead || role === 'coo';
+          // The Head of Procurement's own selection cannot be authorized until
+          // someone else confirms it, so for anyone who can, the form is open
+          // straight away rather than behind a button.
+          const confirmNeeded =
+            c.hodSelected && !c.pmAuthorized && !c.selectionLocked && c.selectedByProcurementHead && !c.selectedByMe && canSelect;
+          const showSelectionForm = (!c.hodSelected || changingSelection || confirmNeeded) && canSelect;
           const reqDeptName = c.requestingDepartment?.name;
           const missingSteps: string[] = [];
           if (!c.minQuotationsMet) missingSteps.push('at least 3 quotations (or a waiver)');
@@ -587,20 +593,20 @@ export default function QuotationDetail() {
                         {c.selectedBy?.name ? `Selected by ${c.selectedBy.name}${c.selectedByMe ? ' (you)' : ''}. ` : ''}
                         Justification: {c.hodJustification}
                       </p>
-                      {!c.pmAuthorized && !c.selectionLocked && c.selectedByProcurementHead && !c.selectedByMe && canSelect && !changingSelection && (
+                      {confirmNeeded && (
                         <p className="text-xs text-amber-700">
                           The Head of Procurement made this selection, so they cannot also authorize it. Confirm it
                           under your own name, with your justification, and they can.
                         </p>
                       )}
-                      {!c.pmAuthorized && !c.selectionLocked && canSelect && !c.selectedByMe && !changingSelection && (
+                      {!c.pmAuthorized && !c.selectionLocked && canSelect && !c.selectedByMe && !changingSelection && !confirmNeeded && (
                         <button
                           type="button"
                           onClick={() => setChangingSelection(true)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary border border-primary/40 rounded-lg hover:bg-primary/5 transition-colors"
                         >
                           <UserCheck className="h-3.5 w-3.5" />
-                          {c.selectedByProcurementHead ? 'Confirm this selection' : 'Change selection'}
+                          Change selection
                         </button>
                       )}
                     </div>
@@ -611,7 +617,7 @@ export default function QuotationDetail() {
                         ? 'Not needed: a waiver was approved and this quotation was authorized directly.'
                         : 'Another quotation on this RFQ has been authorized, so the selection cannot change.'}
                     </p>
-                  ) : (!c.hodSelected || changingSelection) && canSelect ? (
+                  ) : showSelectionForm ? (
                     <div ref={selectionForm.formRef} className="mt-2 space-y-2">
                       {procurementHead && !c.waived && (
                         <p className="text-xs text-gray-500">
@@ -638,7 +644,7 @@ export default function QuotationDetail() {
                         className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50"
                       >
                         {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
-                        Select this quotation
+                        {confirmNeeded ? 'Confirm this selection' : 'Select this quotation'}
                       </button>
                       {changingSelection && (
                         <button

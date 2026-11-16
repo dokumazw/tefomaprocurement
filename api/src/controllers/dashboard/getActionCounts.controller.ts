@@ -6,13 +6,13 @@ import {
   Quotation,
   StoreRequisition,
   Invoice,
-  Delivery,
   SupplierProfile
 } from '../../models/index.js';
 import { isProcurementHead } from '@fossil/shared';
 import { listPendingAuthorizations } from '../../services/pendingAuthorization.service.js';
 import { countRfqsAwaitingQuote } from './getStats.controller.js';
 import { awaitingActivationFilter } from '../../services/supplierActivation.service.js';
+import { awaitingReceiptFilter } from '../../services/awaitingReceipt.service.js';
 
 /**
  * Counts of work waiting on the signed-in user, for the sidebar badges.
@@ -155,29 +155,8 @@ const getActionCounts = async (req: Request, res: Response): Promise<any> => {
         isDeleted: false
       }).exec();
 
-      // Mirrors stores/getPendingDeliveries exactly:
-      // - issued/partially_received POs that have a pending delivery record
-      //   (supplier has shipped, stores needs to GRV)
-      // - issued POs with no delivery record at all (waiting for supplier)
-      // A partially_received PO with no pending delivery is waiting for
-      // the supplier to ship remaining items — stores can't action it yet,
-      // so it must NOT contribute to the badge.
-      pending['/app/deliveries'] = (async () => {
-        const openPOs = await PurchaseOrder.find(
-          { status: { $in: ['issued', 'partially_received'] }, isDeleted: false },
-          '_id status'
-        ).lean();
-        if (!openPOs.length) return 0;
-        const poIds = openPOs.map((po: any) => po._id);
-        const pendingDeliveries = await Delivery.find(
-          { purchaseOrder: { $in: poIds }, status: 'pending', isDeleted: false },
-          'purchaseOrder'
-        ).lean();
-        const withPendingDelivery = new Set(pendingDeliveries.map((d: any) => d.purchaseOrder.toString()));
-        return openPOs.filter(
-          (po: any) => withPendingDelivery.has(po._id.toString()) || po.status === 'issued'
-        ).length;
-      })();
+      // Every order the Deliveries page lists: goods still due.
+      pending['/app/deliveries'] = PurchaseOrder.countDocuments(awaitingReceiptFilter()).exec();
 
       pending['/app/store-requisitions'] = StoreRequisition.countDocuments({
         status: 'pending',

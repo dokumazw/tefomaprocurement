@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { isProcurementHead, formatCurrency } from '@fossil/shared';
-import { User, SupplierProfile, RFQ, Quotation, PurchaseOrder, Inventory, PurchaseRequisition, AuditLog, Department, Site, Delivery } from '../../models/index.js';
+import { User, SupplierProfile, RFQ, Quotation, PurchaseOrder, Inventory, PurchaseRequisition, AuditLog, Department, Site } from '../../models/index.js';
+import { awaitingReceiptFilter } from '../../services/awaitingReceipt.service.js';
 import { buildRoleReportCharts } from '../../lib/reportAnalytics.js';
 import { countLowStock } from '../../lib/stockLevels.js';
 import { buildSiteFilterAsync } from '../../lib/siteScope.js';
@@ -55,7 +56,6 @@ const COO_QUEUE_FILTER = {
   cooApproved: false,
   isDeleted: false
 };
-// No longer a simple filter — see count.pendingDeliveries below.
 const PR_IN_PROGRESS_STATUSES = ['stores_review', 'pending_acceptance', 'accepted', 'sourcing', 'quoted', 'ordered'];
 
 type Severity = 'high' | 'medium' | 'low';
@@ -186,25 +186,8 @@ const count = {
   // level, else the item's, else the default. It once counted anything at 5 or
   // fewer whatever its level, under a "below reorder level" label.
   lowStock: () => countLowStock().then((c) => c.low),
-  // Mirrors getPendingDeliveries: POs with a pending delivery record +
-  // issued POs with no delivery at all. partially_received POs with no
-  // pending delivery are waiting for the supplier — stores can't action them.
-  pendingDeliveries: async () => {
-    const openPOs = await PurchaseOrder.find(
-      { status: { $in: ['issued', 'partially_received'] }, isDeleted: false },
-      '_id status'
-    ).lean();
-    if (!openPOs.length) return 0;
-    const poIds = openPOs.map((po: any) => po._id);
-    const pendingDels = await Delivery.find(
-      { purchaseOrder: { $in: poIds }, status: 'pending', isDeleted: false },
-      'purchaseOrder'
-    ).lean();
-    const withPending = new Set(pendingDels.map((d: any) => d.purchaseOrder.toString()));
-    return openPOs.filter(
-      (po: any) => withPending.has(po._id.toString()) || po.status === 'issued'
-    ).length;
-  },
+  // Every order the Deliveries page lists: goods still due.
+  pendingDeliveries: () => PurchaseOrder.countDocuments(awaitingReceiptFilter()),
   // Suppliers someone else submitted for activation, which this user may
   // approve. The same filter as the list it links to and the sidebar badge.
   awaitingActivation: (userId: unknown) => SupplierProfile.countDocuments(awaitingActivationFilter(userId)),
