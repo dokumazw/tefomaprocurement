@@ -39,8 +39,6 @@ const receiveStockTransfer = async (req: Request, res: Response): Promise<any> =
       }
     }
 
-    const year = new Date().getFullYear();
-    let txCounter = await StoreTransaction.countDocuments();
 
     const linesToReceive =
       items?.length > 0
@@ -68,9 +66,8 @@ const receiveStockTransfer = async (req: Request, res: Response): Promise<any> =
       destInv.lastReceivedDate = new Date();
       await destInv.save();
 
-      txCounter += 1;
+      // The ledger number comes from the StoreTransaction model's atomic counter.
       await StoreTransaction.create({
-        transactionNumber: `ST-TRF-${year}-${String(txCounter).padStart(6, '0')}`,
         type: 'transfer',
         site: transfer.toSite,
         item: row.item._id,

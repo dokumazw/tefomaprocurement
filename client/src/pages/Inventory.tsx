@@ -687,7 +687,10 @@ export default function Inventory() {
                   const item = inv.item || {};
                   // The shared rule: this site's level, else the item's, else the default.
                   const { level, source } = levelOf(inv);
-                  const status = stockStatus(inv.quantityOnHand || 0, level);
+                  // A discontinued item's stock is listed but never low: it is
+                  // not reordered, and the counts above leave it out too.
+                  const discontinued = item.status === 'discontinued';
+                  const status = discontinued ? 'ok' : stockStatus(inv.quantityOnHand || 0, level);
                   const isLowStock = status !== 'ok';
                   const canIssue =
                     issueContext && (inv.quantityOnHand || 0) >= issueContext.lineQty;
@@ -748,6 +751,10 @@ export default function Inventory() {
                         ) : status === 'low' ? (
                           <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 whitespace-nowrap">
                             Low Stock
+                          </span>
+                        ) : discontinued ? (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 whitespace-nowrap">
+                            Discontinued
                           </span>
                         ) : (
                           <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">

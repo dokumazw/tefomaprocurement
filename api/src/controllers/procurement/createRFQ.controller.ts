@@ -150,10 +150,8 @@ const createRFQ = async (req: Request, res: Response): Promise<any> => {
     }
     const siteId = await resolveSiteId(req.user, req.body.siteId || requisitionSiteId);
 
-    // Generate RFQ number
-    const count = await RFQ.countDocuments();
-    const year = new Date().getFullYear();
-    const rfqNumber = `RFQ-${year}-${String(count + 1).padStart(5, '0')}`;
+    // The RFQ number comes from the model's atomic counter when it is saved;
+    // a count here gave two RFQs created at the same moment the same number.
 
     // Auto-publish: if 'open' status is requested, automatically publish the RFQ
     // (Suppliers are already validated above, so we can safely publish)
@@ -167,7 +165,6 @@ const createRFQ = async (req: Request, res: Response): Promise<any> => {
     }
     
     const rfqData: any = {
-      rfqNumber,
       title,
       description,
       site: siteId,

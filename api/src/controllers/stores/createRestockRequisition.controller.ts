@@ -43,6 +43,13 @@ const createRestockRequisition = async (req: Request, res: Response): Promise<an
       return res.status(404).json({ success: false, message: 'Stock record not found' });
     }
     const item = inventory.item;
+    // A discontinued item is never "low", so it is not restocked either.
+    if (item.status && item.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        message: `${item.name} is discontinued, so it is not restocked.`
+      });
+    }
 
     // It goes straight to procurement, where suppliers are matched by
     // category, so the category is settled here rather than in stores review.

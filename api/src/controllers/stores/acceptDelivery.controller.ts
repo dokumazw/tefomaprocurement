@@ -47,8 +47,6 @@ const acceptDelivery = async (req: Request, res: Response): Promise<any> => {
         po.deliverToSite ||
         (await resolveSiteId(req.user));
 
-      const year = new Date().getFullYear();
-      let transactionCounter = await StoreTransaction.countDocuments();
 
       for (const deliveryItem of delivery.items) {
         // Only process items in 'good' condition
@@ -82,13 +80,8 @@ const acceptDelivery = async (req: Request, res: Response): Promise<any> => {
           inventory.totalValue = inventory.quantityOnHand * (inventory.unitCost || 0);
           await inventory.save();
 
-          // Generate transaction number (increment counter for each transaction)
-          transactionCounter++;
-          const transactionNumber = `ST-REC-${year}-${String(transactionCounter).padStart(6, '0')}`;
-
-          // Create store transaction
+          // Create store transaction. The ledger number comes from the StoreTransaction model's atomic counter.
           await StoreTransaction.create({
-            transactionNumber,
             type: 'receipt',
             site: receiveSiteId,
             item: inventoryItem._id,

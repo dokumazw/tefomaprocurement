@@ -14,6 +14,8 @@ export interface IUser extends Document {
   lastLogin?: Date;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  /** Sessions ended by signing out, kept until the token would have expired anyway. */
+  revokedSessions?: Array<{ tokenHash: string; expiresAt: Date }>;
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -72,6 +74,20 @@ const UserSchema = new Schema<IUser>({
   },
   passwordResetToken: String,
   passwordResetExpires: Date,
+  // A signed token stays valid until it expires, so signing out records it
+  // here and `protect` refuses it. Only a hash is kept, and each entry is
+  // pruned once its token would have expired anyway, so the list stays short.
+  revokedSessions: {
+    type: [
+      {
+        _id: false,
+        tokenHash: { type: String, required: true },
+        expiresAt: { type: Date, required: true }
+      }
+    ],
+    select: false,
+    default: undefined
+  },
   isDeleted: {
     type: Boolean,
     default: false

@@ -74,10 +74,9 @@ const createRequisition = async (req: Request, res: Response): Promise<any> => {
       processedItems.push(line);
     }
 
-    // Generate requisition number
-    const count = await PurchaseRequisition.countDocuments();
-    const year = new Date().getFullYear();
-    const requisitionNumber = `PR-${year}-${String(count + 1).padStart(5, '0')}`;
+    // The number comes from the model's atomic counter when it is saved. It
+    // used to be "how many requisitions + 1", worked out here, which gave two
+    // requisitions raised at the same moment the same number.
 
     // Map urgency to priority if needed
     let mappedPriority = priority || 'medium';
@@ -85,7 +84,6 @@ const createRequisition = async (req: Request, res: Response): Promise<any> => {
     else if (urgency === 'normal') mappedPriority = 'medium';
 
     const requisition = await PurchaseRequisition.create({
-      requisitionNumber,
       title: title || 'Untitled Requisition',
       workOrder: workOrder?.trim() || undefined,
       site: siteId,

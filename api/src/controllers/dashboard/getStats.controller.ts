@@ -4,6 +4,7 @@ import { isProcurementHead, formatCurrency } from '@fossil/shared';
 import { User, SupplierProfile, RFQ, Quotation, PurchaseOrder, Inventory, PurchaseRequisition, AuditLog, Department, Site, Delivery } from '../../models/index.js';
 import { buildRoleReportCharts } from '../../lib/reportAnalytics.js';
 import { countLowStock } from '../../lib/stockLevels.js';
+import { buildSiteFilterAsync } from '../../lib/siteScope.js';
 import { resolveUserDepartmentIds } from '../../lib/departmentScope.js';
 import { currentBaseCurrency } from '../../tenancy/sbuContext.js';
 import { awaitingActivationFilter } from '../../services/supplierActivation.service.js';
@@ -496,10 +497,14 @@ async function buildRoleStats(
     }
 
     case 'stores_officer': {
+      // The same stock the Inventory page shows this officer, which these
+      // tiles link to: their own site. Counting every site made the two
+      // disagree.
+      const siteScope = await buildSiteFilterAsync(user).catch(() => ({}));
       const [stockAlerts, totalItems, pendingDeliveries, approvedPOs, storesReviewQueue, inventoryValue, receivedThisMonth] =
         await Promise.all([
-          countLowStock(),
-          Inventory.countDocuments({ isDeleted: false }),
+          countLowStock(siteScope),
+          Inventory.countDocuments({ isDeleted: false, ...siteScope }),
           count.pendingDeliveries(),
           count.approvedPOs(),
           PurchaseRequisition.countDocuments({ status: 'stores_review', isDeleted: false }),

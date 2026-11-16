@@ -1,11 +1,14 @@
 import type { Request, Response } from 'express';
+import { isProcurementHead } from '@fossil/shared';
 
 import { Quotation, PurchaseOrder } from '../../models/index.js';
 import { isRfqSealed } from '../../lib/rfqVisibility.js';
 import {
   countSubmittedQuotations,
   minimumQuotationsFrom,
-  quotationFullyAuthorized
+  quotationFullyAuthorized,
+  refId,
+  selectionLocked
 } from '../../services/quotationCompliance.service.js';
 
 const getQuotationById = async (req: Request, res: Response): Promise<any> => {
@@ -32,11 +35,20 @@ const getQuotationById = async (req: Request, res: Response): Promise<any> => {
         {
           path: 'rfq',
           select: 'rfqNumber title description items submissionDeadline status hodSelection pmAuthorization selectedQuotation quotationWaiver purchaseRequisition',
-          populate: {
-            path: 'purchaseRequisition',
-            select: 'requisitionNumber title department',
-            populate: { path: 'department', select: 'name code' }
-          }
+          populate: [
+            {
+              path: 'purchaseRequisition',
+              select: 'requisitionNumber title department',
+              populate: { path: 'department', select: 'name code' }
+            },
+            // Who selected, so the page can say so and keep the selector from
+            // being offered the authorization they are not allowed to give.
+            {
+              path: 'hodSelection.approvedBy',
+              select: 'firstName lastName role department',
+              populate: { path: 'department', select: 'name code' }
+            }
+          ]
         },
         { path: 'supplier', select: 'companyName contactEmail contactPhone' },
         { path: 'submittedBy', select: 'firstName lastName email' }
@@ -86,6 +98,12 @@ const getQuotationById = async (req: Request, res: Response): Promise<any> => {
 
     const requestingDepartment = rfq?.purchaseRequisition?.department || null;
 
+    const selector: any = hodSelected ? rfq?.hodSelection?.approvedBy : null;
+    const selectorName =
+      selector && typeof selector === 'object' && selector.firstName
+        ? `${selector.firstName} ${selector.lastName || ''}`.trim()
+        : null;
+
     quotationData.compliance = {
       minQuotationsMet: met,
       quotationCount: count,
@@ -94,6 +112,11 @@ const getQuotationById = async (req: Request, res: Response): Promise<any> => {
       hodJustification: hodSelected ? rfq?.hodSelection?.justification || null : null,
       pmAuthorized: Boolean(pmAuthorized),
       fullyAuthorized: quotationFullyAuthorized(rfq, qid),
+      selectedBy: selector ? { id: refId(selector), name: selectorName } : null,
+      selectedByMe: Boolean(selector && refId(selector) === String(req.user!._id)),
+      selectedByProcurementHead: Boolean(selector && typeof selector === 'object' && isProcurementHead(selector)),
+      // The RFQ's selection, on whichever quotation: authorized or awarded.
+      selectionLocked: rfq ? selectionLocked(rfq) : false,
       requestingDepartment: requestingDepartment
         ? {
             id: requestingDepartment._id,

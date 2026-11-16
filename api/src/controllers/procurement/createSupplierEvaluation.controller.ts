@@ -8,7 +8,6 @@ import {
 import { SupplierProfile, SupplierEvaluation } from '../../models/index.js';
 import { createAuditLog } from '../../middleware/index.js';
 import { refuseInvalid } from '../../lib/validation.js';
-import { notifyUsersByRole } from '../../services/notification.service.js';
 
 const createSupplierEvaluation = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -47,30 +46,38 @@ const createSupplierEvaluation = async (req: Request, res: Response): Promise<an
     // top level. Spreading an undefined top-level value used to erase them.
     const notes = (scores as any).otherNotes ?? otherNotes;
 
-    // The evaluator does not approve their own evaluation. It enters the
-    // review chain at pending_hod (Rev 9 clause 5.6: HOD review, then SEC
-    // sign-off), which is what makes hodReviewEvaluation and
-    // secApproveEvaluation reachable at all. The supplier's
-    // lastEvaluationAt/nextEvaluationDue are stamped only on final approval.
+    // An evaluation is final when saved: there is no review step (decided
+    // 2026-11-16; the page and the user manual say so). It used to wait at
+    // pending_hod for a review no screen offered, so no score ever reached
+    // the rankings, which count recorded evaluations only. `approved` is the
+    // recorded state the rankings and reports read.
     const evaluation = await SupplierEvaluation.create({
       supplier: supplier._id,
       evaluationType: evaluationType || 'initial',
       scores: { ...scores, otherNotes: notes },
       recommendation,
       evaluatedBy: req.user!._id,
-      status: 'pending_hod',
+      status: 'approved',
       secApproved: false,
       nextReviewDue
     });
+
+    // The supplier's tier decides when they come round again. Set directly
+    // rather than by saving the whole profile, so an older record that would
+    // fail today's validation cannot stop the evaluation being recorded.
+    await SupplierProfile.updateOne(
+      { _id: supplier._id },
+      { $set: { lastEvaluationAt: evaluation.createdAt, nextEvaluationDue: nextReviewDue } }
+    );
 
     await createAuditLog({
       action: 'create',
       entity: 'SupplierEvaluation',
       entityId: evaluation._id,
       user: req.user,
-      description: `Recorded supplier evaluation for ${supplier.companyName} (pending HOD review)`,
+      description: `Recorded supplier evaluation for ${supplier.companyName}`,
       newData: {
-        status: 'pending_hod',
+        status: 'approved',
         recommendation,
         tier: supplier.tier,
         reviewIntervalMonths: getReviewIntervalMonths(supplier.tier)
@@ -78,19 +85,9 @@ const createSupplierEvaluation = async (req: Request, res: Response): Promise<an
       req
     });
 
-    await notifyUsersByRole(['department_head'], {
-      type: 'supplier_evaluation_due',
-      title: 'Supplier evaluation awaiting review',
-      message: `An evaluation for ${supplier.companyName} is awaiting your review.`,
-      entity: 'SupplierEvaluation',
-      entityId: evaluation._id,
-      relatedUser: req.user!._id,
-      metadata: { companyName: supplier.companyName }
-    });
-
     res.status(201).json({
       success: true,
-      message: 'Evaluation submitted for HOD review.',
+      message: 'Evaluation recorded.',
       data: evaluation
     });
   } catch (error: any) {

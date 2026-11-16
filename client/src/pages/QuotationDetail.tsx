@@ -95,6 +95,9 @@ export default function QuotationDetail() {
   const [sealedInfo, setSealedInfo] = useState<any>(null);
   const [closingRfq, setClosingRfq] = useState<any>(false);
   const [hodJustification, setHodJustification] = useState<any>('');
+  // Re-opens the selection form on a quotation that is already selected but
+  // not yet authorized, so someone else can take the selection over.
+  const [changingSelection, setChangingSelection] = useState<boolean>(false);
   const [waiverReason, setWaiverReason] = useState<any>('');
   const [waiverType, setWaiverType] = useState<string>('');
   const [approvingWaiver, setApprovingWaiver] = useState<any>(false);
@@ -166,8 +169,14 @@ export default function QuotationDetail() {
         quotationId: quotation._id,
         justification: hodJustification.trim()
       });
-      showToast('Quotation selected. Waiting for the Head of Procurement to authorize.', 'success');
+      showToast(
+        isProcurementHead(user)
+          ? 'Quotation selected. A procurement officer must confirm it before you can authorize it.'
+          : 'Quotation selected. Waiting for the Head of Procurement to authorize.',
+        'success'
+      );
       setHodJustification('');
+      setChangingSelection(false);
       selectionForm.reset();
       fetchQuotation();
     } catch (error: any) {
@@ -572,10 +581,44 @@ export default function QuotationDetail() {
                       : 'Procurement selection with justification'
                   }
                 >
-                  {c.hodSelected ? (
-                    <p className="text-xs text-gray-500 mt-0.5">Justification: {c.hodJustification}</p>
-                  ) : canSelect ? (
+                  {c.hodSelected && (
+                    <div className="mt-0.5 space-y-1">
+                      <p className="text-xs text-gray-500">
+                        {c.selectedBy?.name ? `Selected by ${c.selectedBy.name}${c.selectedByMe ? ' (you)' : ''}. ` : ''}
+                        Justification: {c.hodJustification}
+                      </p>
+                      {!c.pmAuthorized && !c.selectionLocked && c.selectedByProcurementHead && !c.selectedByMe && canSelect && !changingSelection && (
+                        <p className="text-xs text-amber-700">
+                          The Head of Procurement made this selection, so they cannot also authorize it. Confirm it
+                          under your own name, with your justification, and they can.
+                        </p>
+                      )}
+                      {!c.pmAuthorized && !c.selectionLocked && canSelect && !c.selectedByMe && !changingSelection && (
+                        <button
+                          type="button"
+                          onClick={() => setChangingSelection(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary border border-primary/40 rounded-lg hover:bg-primary/5 transition-colors"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          {c.selectedByProcurementHead ? 'Confirm this selection' : 'Change selection'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {!c.hodSelected && c.selectionLocked ? (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {c.pmAuthorized
+                        ? 'Not needed: a waiver was approved and this quotation was authorized directly.'
+                        : 'Another quotation on this RFQ has been authorized, so the selection cannot change.'}
+                    </p>
+                  ) : (!c.hodSelected || changingSelection) && canSelect ? (
                     <div ref={selectionForm.formRef} className="mt-2 space-y-2">
+                      {procurementHead && !c.waived && (
+                        <p className="text-xs text-gray-500">
+                          If you select it yourself, you cannot also authorize it: a procurement officer will need to
+                          confirm your selection first.
+                        </p>
+                      )}
                       <div>
                         <textarea
                           value={hodJustification}
@@ -597,17 +640,31 @@ export default function QuotationDetail() {
                         {authorizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
                         Select this quotation
                       </button>
+                      {changingSelection && (
+                        <button
+                          type="button"
+                          onClick={() => { setChangingSelection(false); setHodJustification(''); selectionForm.reset(); }}
+                          className="ml-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </div>
-                  ) : (
+                  ) : !c.hodSelected ? (
                     <p className="text-xs text-amber-600 mt-0.5">
                       Waiting for procurement to select this quotation with a justification.
                     </p>
-                  )}
+                  ) : null}
                 </Step>
 
                 <Step done={c.pmAuthorized} title="Head of Procurement authorization">
                   {c.pmAuthorized ? (
                     <p className="text-xs text-gray-500 mt-0.5">Authorized.</p>
+                  ) : canPmAuthorize && c.hodSelected && c.selectedByMe ? (
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      You selected this quotation, so you cannot also authorize it. A procurement officer can confirm
+                      the selection under step 2, and then you can authorize it.
+                    </p>
                   ) : canPmAuthorize ? (
                     <div className="mt-2 space-y-2">
                       {/* With an approved waiver, a selection is not required and

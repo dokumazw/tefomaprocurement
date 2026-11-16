@@ -24,7 +24,11 @@ type Tab = 'due' | 'all'
 
 const STATUS_LABELS: Record<string, string> = {
   approved: 'Recorded',
-  rejected: 'Rejected'
+  rejected: 'Rejected',
+  // Saved before evaluations became final on save, and not yet moved over by
+  // finalise-evaluations; they do not count towards rankings until they are.
+  pending_hod: 'Not yet counted',
+  pending_sec: 'Not yet counted'
 }
 
 const STATUS_COLORS: Record<string, string> = {

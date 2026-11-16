@@ -10,6 +10,21 @@ export async function countSubmittedQuotations(rfqId: string): Promise<number> {
   });
 }
 
+/** The id of a user reference, whether populated or not. */
+export function refId(ref: unknown): string | null {
+  if (!ref) return null;
+  const id = (ref as { _id?: unknown })._id ?? ref;
+  return String(id);
+}
+
+/**
+ * Whether the RFQ's selection may still change: not once the Head of
+ * Procurement has authorized a quotation, and not once it is awarded.
+ */
+export function selectionLocked(rfq: IRFQ): boolean {
+  return Boolean(rfq.pmAuthorization?.quotation) || (rfq as any).status === 'awarded';
+}
+
 export function hasValidQuotationWaiver(rfq: IRFQ): boolean {
   const w = (rfq as any).quotationWaiver;
   return Boolean(w?.waived && w?.reason && w?.approvedBy);
@@ -52,5 +67,11 @@ export function quotationFullyAuthorized(rfq: IRFQ, quotationId: string): boolea
   const pmOk =
     rfq.pmAuthorization?.quotation &&
     String(rfq.pmAuthorization.quotation) === qid;
-  return Boolean(hodOk && pmOk);
+  // Two people: whoever selected cannot be the one who authorized. The
+  // authorize step refuses that, and a selection cannot change once
+  // authorized; this holds for any record made before either rule.
+  const selector = refId(rfq.hodSelection?.approvedBy);
+  const authorizer = refId(rfq.pmAuthorization?.authorizedBy);
+  const twoPeople = !selector || !authorizer || selector !== authorizer;
+  return Boolean(hodOk && pmOk && twoPeople);
 }

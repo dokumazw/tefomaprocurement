@@ -347,7 +347,7 @@ PurchaseRequisitionSchema.pre('save', async function(next) {
 // fails validation and the hook never runs at all.
 PurchaseRequisitionSchema.pre('validate', async function () {
   if (this.isNew && !this.requisitionNumber) {
-    this.requisitionNumber = await nextNumber(this, { type: 'purchaseRequisition', prefix: 'PR' });
+    this.requisitionNumber = await nextNumber(this, { type: 'purchaseRequisition', prefix: 'PR', field: 'requisitionNumber' });
   }
 });
 

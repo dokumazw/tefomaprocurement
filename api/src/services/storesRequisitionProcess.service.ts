@@ -2,6 +2,8 @@ import { isValidCategoryCode } from '@fossil/shared';
 import { PurchaseRequisition, Item, Inventory, StoreTransaction } from '../models/index.js';
 import { createNotification, notifyUsersByRole } from './notification.service.js';
 import { resolveSiteId } from '../lib/siteScope.js';
+import { nextNumber } from './numbering.service.js';
+import type { Document } from 'mongoose';
 
 const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -86,21 +88,13 @@ export async function linesShortOfStock(requisition: any, siteId: any): Promise<
   return short;
 }
 
-/** SI-YYYY-NNNNN — assigned when stock is physically issued. */
-export async function generateStoresIssueNumber(): Promise<string> {
-  const year = new Date().getFullYear();
-  const last = await PurchaseRequisition.findOne({
-    storesIssueNumber: { $regex: `^SI-${year}-` }
-  })
-    .sort({ storesIssueNumber: -1 })
-    .select('storesIssueNumber');
-
-  let counter = 0;
-  if (last?.storesIssueNumber) {
-    const match = last.storesIssueNumber.match(/SI-\d+-(\d+)/);
-    if (match) counter = parseInt(match[1], 10) || 0;
-  }
-  return `SI-${year}-${String(counter + 1).padStart(5, '0')}`;
+/**
+ * The stores issue number, <SBU>-SI-YYYY-NNNNN, assigned when stock is
+ * physically issued. From the atomic counter: reading the last number and
+ * adding one gave two issues at the same moment the same number.
+ */
+export async function generateStoresIssueNumber(requisition: Document): Promise<string> {
+  return nextNumber(requisition, { type: 'storesIssue', prefix: 'SI', field: 'storesIssueNumber' });
 }
 
 export interface ProcessResult {
@@ -216,7 +210,7 @@ export async function processRequisitionAgainstStock(
   requisition.storesReviewedAt = new Date();
 
   if (issuedLines.length > 0 && !requisition.storesIssueNumber) {
-    requisition.storesIssueNumber = await generateStoresIssueNumber();
+    requisition.storesIssueNumber = await generateStoresIssueNumber(requisition);
   }
 
   if (shortfallItems.length === 0) {
@@ -376,7 +370,7 @@ export async function issueRequisitionLine(
   line.quantityFulfilledFromStock = alreadyIssued + issueQty;
 
   if (!requisition.storesIssueNumber) {
-    requisition.storesIssueNumber = await generateStoresIssueNumber();
+    requisition.storesIssueNumber = await generateStoresIssueNumber(requisition);
   }
 
   requisition.storesReviewedBy = user._id;

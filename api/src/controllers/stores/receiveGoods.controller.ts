@@ -242,9 +242,6 @@ const receiveGoods = async (req: Request, res: Response): Promise<any> => {
       });
     }
 
-    // Get initial transaction count to avoid race conditions
-    let transactionCounter = await StoreTransaction.countDocuments();
-    const year = new Date().getFullYear();
 
     // Update PO quantities and update inventory
     for (const line of lines) {
@@ -273,13 +270,8 @@ const receiveGoods = async (req: Request, res: Response): Promise<any> => {
         inventory.lastReceivedDate = new Date();
         await inventory.save();
 
-        // Generate transaction number (increment counter for each transaction)
-        transactionCounter++;
-        const transactionNumber = `ST-REC-${year}-${String(transactionCounter).padStart(6, '0')}`;
-
-        // Create store transaction for receipt
+        // Create store transaction for receipt. The ledger number comes from the StoreTransaction model's atomic counter.
         await StoreTransaction.create({
-          transactionNumber,
           type: 'receipt',
           site: receiveSiteId,
           item: inventoryItem._id,
@@ -378,6 +370,13 @@ const receiveGoods = async (req: Request, res: Response): Promise<any> => {
       newData: { grvNumber: delivery.grvNumber, itemCount: items.length, status: delivery.status },
       req
     });
+
+    // The screen opens the new GRV straight from this reply, so the people on
+    // it must arrive as names, not ids, as they do from the deliveries list.
+    await delivery.populate([
+      { path: 'receivedBy', select: 'firstName lastName role' },
+      { path: 'inspectedBy', select: 'firstName lastName role' }
+    ]);
 
     res.status(201).json({
       success: true,

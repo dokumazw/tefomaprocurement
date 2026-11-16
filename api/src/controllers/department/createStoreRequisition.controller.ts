@@ -162,15 +162,12 @@ const createStoreRequisition = async (req: Request, res: Response): Promise<any>
       });
     }
 
-    // Generate requisition number
-    const count = await StoreRequisition.countDocuments();
-    const year = new Date().getFullYear();
-    const requisitionNumber = `SR-${year}-${String(count + 1).padStart(5, '0')}`;
+    // Numbered by the model's atomic counter on save; a count here gave two
+    // requests made at the same moment the same number.
 
     const siteId = await resolveSiteId(req.user, req.body.siteId);
 
     const requisition = await StoreRequisition.create({
-      requisitionNumber,
       site: siteId,
       department: req.user!.department,
       requestedBy: req.user!._id,

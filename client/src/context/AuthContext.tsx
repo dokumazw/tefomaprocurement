@@ -43,13 +43,21 @@ export function AuthProvider({ children }: any) {
       }
 
       if (token) {
+        // The answer applies only to the session that asked. If the user
+        // signed out (or in as someone else) while it was on its way, a late
+        // reply must not write the old token back and sign them in again.
+        const stillCurrent = () => readStoredSession().token === token;
         try {
           const response = await authAPI.getMe();
-          setUser(response.data.user);
-          persistSession(token, response.data.user);
+          if (stillCurrent()) {
+            setUser(response.data.user);
+            persistSession(token, response.data.user);
+          }
         } catch {
-          clearSession();
-          setUser(null);
+          if (stillCurrent()) {
+            clearSession();
+            setUser(null);
+          }
         }
       }
 
@@ -98,6 +106,16 @@ export function AuthProvider({ children }: any) {
   };
 
   const logout = () => {
+    // Ends the session on the server too, so a copy of the token stops
+    // working. The token is passed explicitly because the session is cleared
+    // straight after, before the request would otherwise pick it up. Signing
+    // out locally never waits on the network.
+    const { token } = readStoredSession();
+    if (token) {
+      authAPI.logout(token).catch(() => {
+        /* already ended, or offline: the local sign-out still stands */
+      });
+    }
     clearSession();
     setUser(null);
   };

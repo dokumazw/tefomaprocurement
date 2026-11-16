@@ -11,6 +11,7 @@ router.post('/register', auth.register);
 router.post('/forgot-password', auth.forgotPassword);
 router.post('/reset-password', auth.resetPassword);
 router.get('/me', protect, auth.getMe);
+router.post('/logout', protect, auth.logout);
 router.put('/profile', protect, auth.updateProfile);
 router.put('/change-password', protect, auth.changePassword);
 

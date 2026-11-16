@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { RFQ, Quotation, User } from '../../models/index.js';
 import { isProcurementHead, validateQuotationSelection } from '@fossil/shared';
-import { meetsMinimumQuotations } from '../../services/quotationCompliance.service.js';
+import { meetsMinimumQuotations, refId, selectionLocked } from '../../services/quotationCompliance.service.js';
 import { createAuditLog } from '../../middleware/index.js';
 import { createNotifications } from '../../services/notification.service.js';
 import { refuseInvalid } from '../../lib/validation.js';
@@ -12,6 +12,14 @@ import { refuseInvalid } from '../../lib/validation.js';
  * This was the requesting department head's step (Rev 9 clause 5.2.1); it now
  * sits with procurement, who run the sourcing. The record keeps its
  * `hodSelection` name so existing RFQs read the same.
+ *
+ * A selection can be changed, by any procurement officer or the Head of
+ * Procurement, until it is authorized. That is what keeps an award moving when
+ * the Head of Procurement selects: they cannot authorize their own selection,
+ * so an officer confirms it under their own name and the head authorizes.
+ * Once authorized, or awarded, it is fixed: changing it then would let the
+ * authorizer become the selector, or carry an authorization to a quotation it
+ * was never given for.
  */
 const selectQuotation = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -25,10 +33,23 @@ const selectQuotation = async (req: Request, res: Response): Promise<any> => {
       return res.status(404).json({ success: false, message: 'RFQ not found' });
     }
 
+    if (selectionLocked(rfq)) {
+      return res.status(409).json({
+        success: false,
+        message:
+          (rfq as any).status === 'awarded'
+            ? 'This RFQ has been awarded, so its selection cannot change.'
+            : 'The Head of Procurement has authorized this selection, so it cannot change.'
+      });
+    }
+
     const quotation = await Quotation.findOne({ _id: quotationId, rfq: id, isDeleted: false });
     if (!quotation) {
       return res.status(404).json({ success: false, message: 'Quotation not found for this RFQ' });
     }
+
+    const previous = rfq.hodSelection?.quotation ? String(rfq.hodSelection.quotation) : null;
+    const previousSelector = refId(rfq.hodSelection?.approvedBy);
 
     const { met, count } = await meetsMinimumQuotations(String(rfq._id), rfq);
     if (!met) {
@@ -53,7 +74,12 @@ const selectQuotation = async (req: Request, res: Response): Promise<any> => {
       entity: 'RFQ',
       entityId: rfq._id,
       user: req.user,
-      description: `Procurement selected quotation for RFQ ${rfq.rfqNumber}`,
+      description: previous
+        ? previous === String(quotation._id)
+          ? `Procurement confirmed the selected quotation for RFQ ${rfq.rfqNumber}`
+          : `Procurement changed the selected quotation for RFQ ${rfq.rfqNumber}`
+        : `Procurement selected quotation for RFQ ${rfq.rfqNumber}`,
+      previousData: previous ? { quotationId: previous, selectedBy: previousSelector } : undefined,
       newData: { quotationId, justification },
       req
     });
@@ -61,11 +87,12 @@ const selectQuotation = async (req: Request, res: Response): Promise<any> => {
     // Authorization is the Head of Procurement's, so tell them, not the officers.
     // The notification points at the quotation: that page carries the
     // authorize control, the RFQ page does not.
+    // Never the selector themselves: they cannot authorize their own choice.
     const heads = (
       await User.find({ role: 'department_head', status: 'active', isDeleted: false })
         .select('_id email firstName lastName role department')
         .populate('department', 'name code')
-    ).filter((u: any) => isProcurementHead(u));
+    ).filter((u: any) => isProcurementHead(u) && String(u._id) !== String(req.user!._id));
     if (heads.length) await createNotifications(heads, {
       type: 'quotation_submitted',
       title: 'Quotation selected — your authorization required',
@@ -75,9 +102,26 @@ const selectQuotation = async (req: Request, res: Response): Promise<any> => {
       relatedUser: req.user!._id
     });
 
+    // When the Head of Procurement selects, nobody can authorize it as it
+    // stands, so the officers are asked to confirm it under their own name.
+    if (isProcurementHead(req.user)) {
+      const officers = await User.find({ role: 'procurement_officer', status: 'active', isDeleted: false })
+        .select('_id email firstName lastName role');
+      if (officers.length) await createNotifications(officers, {
+        type: 'quotation_submitted',
+        title: 'Selection needs confirming',
+        message: `RFQ ${rfq.rfqNumber}: the Head of Procurement selected a quotation and cannot also authorize it. Confirm the selection so they can.`,
+        entity: 'Quotation',
+        entityId: quotation._id,
+        relatedUser: req.user!._id
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Quotation selected. Awaiting Procurement Manager authorization.',
+      message: isProcurementHead(req.user)
+        ? 'Quotation selected. A procurement officer must confirm it before you can authorize it.'
+        : 'Quotation selected. Awaiting Procurement Manager authorization.',
       data: rfq
     });
   } catch (error) {

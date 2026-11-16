@@ -153,7 +153,7 @@ const StoreRequisitionSchema = new Schema<IStoreRequisition>({
 // fails validation and the hook never runs at all.
 StoreRequisitionSchema.pre('validate', async function () {
   if (this.isNew && !this.requisitionNumber) {
-    this.requisitionNumber = await nextNumber(this, { type: 'storeRequisition', prefix: 'SR' });
+    this.requisitionNumber = await nextNumber(this, { type: 'storeRequisition', prefix: 'SR', field: 'requisitionNumber' });
   }
 });
 

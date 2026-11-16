@@ -4,6 +4,7 @@ import { isProcurementHead } from '@fossil/shared';
 import { User } from '../models/index.js';
 import { getJwtSecret } from '../config/secrets.js';
 import { getSbu } from '../tenancy/sbuContext.js';
+import { sessionTokenHash } from '../lib/sessionToken.js';
 
 interface DecodedToken {
   id: string;
@@ -45,14 +46,19 @@ export const protect = async (
       });
     }
 
-    const user = await User.findById(decoded.id)
+    // A token that was signed out is refused even though its signature is
+    // still good. Checked in the same lookup, so it costs no extra query.
+    const user = await User.findOne({
+      _id: decoded.id,
+      'revokedSessions.tokenHash': { $ne: sessionTokenHash(token) }
+    })
       .select('-password')
       .populate('department', 'name code');
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'User not found'
+        message: 'Your session has ended. Please sign in again.'
       });
     }
 

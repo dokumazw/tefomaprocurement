@@ -22,6 +22,7 @@ import Modal, { ModalFooter } from '../components/Modal';
 import Drawer from '../components/Drawer';
 import TableSkeleton from '../components/TableSkeleton';
 import { formatCurrency } from '../lib/constants';
+import { personName } from '../lib/people';
 import Pagination from '../components/Pagination';
 import { DEFAULT_PAGE_SIZE, emptyPagination, parsePagination } from '../lib/pagination';
 import { FormSteps, FormStepNav } from '../components/FormSteps';
@@ -1098,9 +1099,7 @@ export default function Deliveries() {
                   <div className="border border-gray-200 rounded-xl p-3">
                     <p className="text-xs font-semibold text-primary uppercase tracking-wide">Received by</p>
                     <p className="text-sm text-gray-900 mt-1">
-                      {selectedDelivery.receivedBy
-                        ? `${selectedDelivery.receivedBy.firstName} ${selectedDelivery.receivedBy.lastName}`
-                        : <span className="text-gray-400">Not recorded</span>}
+                      {personName(selectedDelivery.receivedBy) || <span className="text-gray-400">Not recorded</span>}
                     </p>
                     {(selectedDelivery.receivedAt || selectedDelivery.deliveryDate) && (
                       <p className="text-xs text-gray-500 mt-0.5">
@@ -1112,9 +1111,7 @@ export default function Deliveries() {
                   <div className="border border-gray-200 rounded-xl p-3">
                     <p className="text-xs font-semibold text-primary uppercase tracking-wide">Inspected by</p>
                     <p className="text-sm text-gray-900 mt-1">
-                      {selectedDelivery.inspectedBy
-                        ? `${selectedDelivery.inspectedBy.firstName} ${selectedDelivery.inspectedBy.lastName}`
-                        : <span className="text-gray-400">Pending inspection</span>}
+                      {personName(selectedDelivery.inspectedBy) || <span className="text-gray-400">Pending inspection</span>}
                     </p>
                     {selectedDelivery.inspectedAt && (
                       <p className="text-xs text-gray-500 mt-0.5">

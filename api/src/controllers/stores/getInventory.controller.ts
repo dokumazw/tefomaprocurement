@@ -51,12 +51,16 @@ const getInventory = async (req: Request, res: Response): Promise<any> => {
       { $match: itemMatch }
     ];
 
-    // The shared rule: the site's level, else the item's, else the default.
+    // The shared rule: the site's level, else the item's, else the default,
+    // counted only for items still in the catalogue (withLiveItem). Stock of a
+    // discontinued item is still listed, because it is still on the shelf,
+    // but it is never "low": nobody reorders it, and the dashboards, reports
+    // and alerts leave it out too.
     if (filterLowStock) {
-      baseStages.push({ $match: { $expr: isLowExpr } });
+      baseStages.push({ $match: { 'itemDoc.status': 'active', $expr: isLowExpr } });
     }
     if (filterOutOfStock) {
-      baseStages.push({ $match: { $expr: isOutExpr } });
+      baseStages.push({ $match: { 'itemDoc.status': 'active', $expr: isOutExpr } });
     }
 
     const [result] = await Inventory.aggregate([
@@ -97,7 +101,7 @@ const getInventory = async (req: Request, res: Response): Promise<any> => {
             }
           ],
           lowStock: [
-            { $match: { $expr: isLowExpr } },
+            { $match: { 'itemDoc.status': 'active', $expr: isLowExpr } },
             { $group: { _id: null, count: { $sum: 1 }, out: { $sum: { $cond: [isOutExpr, 1, 0] } } } }
           ],
           totalCount: [{ $count: 'count' }],
@@ -144,7 +148,8 @@ const getInventory = async (req: Request, res: Response): Promise<any> => {
                   description: '$itemDoc.description',
                   category: '$itemDoc.category',
                   unit: '$itemDoc.unit',
-                  reorderLevel: '$itemDoc.reorderLevel'
+                  reorderLevel: '$itemDoc.reorderLevel',
+                  status: '$itemDoc.status'
                 }
               }
             }

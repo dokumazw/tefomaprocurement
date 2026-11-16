@@ -6,6 +6,7 @@ import updateProfile from './updateProfile.controller.js';
 import changePassword from './changePassword.controller.js';
 import forgotPassword from './forgotPassword.controller.js';
 import resetPassword from './resetPassword.controller.js';
+import logout from './logout.controller.js';
 
 export default {
   login,
@@ -15,5 +16,6 @@ export default {
   updateProfile,
   changePassword,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  logout
 };

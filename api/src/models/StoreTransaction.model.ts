@@ -94,12 +94,24 @@ const StoreTransactionSchema = new Schema<IStoreTransaction>({
   timestamps: true
 });
 
-// Generate transaction number before validation (required field must be set pre-validate)
+/** The ledger's established codes, e.g. ST-TRF for a transfer rather than ST-TRA. */
+const TYPE_CODES: Record<string, string> = {
+  receipt: 'REC',
+  issue: 'ISS',
+  adjustment: 'ADJ',
+  transfer: 'TRF',
+  return: 'RET'
+};
+
+// Generate transaction number before validation (required field must be set
+// pre-validate). One atomic sequence for every type; controllers used to number
+// these themselves from a count, which gave two movements at once the same
+// number and failed the second on the unique index.
 StoreTransactionSchema.pre('validate', async function() {
   if (this.isNew && !this.transactionNumber) {
     const year = new Date().getFullYear();
-    const typePrefix = this.type.substring(0, 3).toUpperCase();
-    const seq = await nextSequence(this, 'storeTransaction', year);
+    const typePrefix = TYPE_CODES[this.type] || this.type.substring(0, 3).toUpperCase();
+    const seq = await nextSequence(this, 'storeTransaction', year, { field: 'transactionNumber', pattern: 'ST-[A-Z]{3}' });
     this.transactionNumber = `${sbuNumberPrefix()}ST-${typePrefix}-${year}-${String(seq).padStart(6, '0')}`;
   }
 });

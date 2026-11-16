@@ -6,6 +6,7 @@ import { createAuditLog } from '../../middleware/index.js';
 import { refuseInvalid } from '../../lib/validation.js';
 import { createNotification } from '../../services/notification.service.js';
 import { findOrCreateInventory, userSiteId, canAccessAllSites } from '../../lib/siteScope.js';
+import { nextNumber } from '../../services/numbering.service.js';
 
 const issueStock = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -85,20 +86,6 @@ const issueStock = async (req: Request, res: Response): Promise<any> => {
       });
     }
 
-    // Get transaction counter for the year
-    const year = new Date().getFullYear();
-    const lastTransaction = await StoreTransaction.findOne({
-      transactionNumber: { $regex: `^ST-ISS-${year}-` }
-    }).sort({ createdAt: -1 });
-
-    let transactionCounter = 0;
-    if (lastTransaction && lastTransaction.transactionNumber) {
-      const match = lastTransaction.transactionNumber.match(/ST-ISS-\d+-(.+)/);
-      if (match) {
-        transactionCounter = parseInt(match[1], 10) || 0;
-      }
-    }
-
     // Every line is checked before any stock moves. Checking as it went, a
     // short second line was refused after the first had already left stock,
     // and the requisition never recorded that first issue.
@@ -172,13 +159,8 @@ const issueStock = async (req: Request, res: Response): Promise<any> => {
       }
       await inventory.save();
 
-      // Generate transaction number (increment counter for each transaction)
-      transactionCounter++;
-      const transactionNumber = `ST-ISS-${year}-${String(transactionCounter).padStart(6, '0')}`;
-
-      // Create store transaction
+      // Create store transaction; the model numbers it atomically.
       await StoreTransaction.create({
-        transactionNumber,
         type: 'issue',
         site: requisition.site,
         item: reqItem.item._id,
@@ -212,10 +194,14 @@ const issueStock = async (req: Request, res: Response): Promise<any> => {
     // Assigned once, on the first issue, so a partially-issued requisition keeps
     // one note number across subsequent collections rather than minting a new
     // document each time.
+    // Taken from the atomic counter, not a count of notes so far, which gave
+    // two issues at the same moment the same note number.
     if (!(requisition as any).issueNoteNumber) {
-      const issuedCount = await StoreRequisition.countDocuments({ issueNoteNumber: { $exists: true, $ne: null } });
-      (requisition as any).issueNoteNumber =
-        `SIN-${new Date().getFullYear()}-${String(issuedCount + 1).padStart(5, '0')}`;
+      (requisition as any).issueNoteNumber = await nextNumber(requisition, {
+        type: 'issueNote',
+        prefix: 'SIN',
+        field: 'issueNoteNumber'
+      });
     }
 
     await requisition.save();

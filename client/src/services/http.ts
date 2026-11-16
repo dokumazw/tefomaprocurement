@@ -24,7 +24,8 @@ const http = axios.create({
 http.interceptors.request.use(
   (config: any) => {
     const token = localStorage.getItem('token');
-    if (token) {
+    // A request that names its own token (signing out) keeps it.
+    if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
@@ -59,7 +60,14 @@ http.interceptors.response.use(
       url.includes('/auth/verify-otp') ||
       url.includes('/auth/register');
 
-    if (error.response?.status === 401 && !isAuthEndpoint) {
+    // A 401 ends only the session that sent the request. One still on its way
+    // from before a sign-out, or from a previous user, says nothing about the
+    // session stored now.
+    const sentToken = String(error.config?.headers?.Authorization || '').replace(/^Bearer\s+/i, '');
+    const storedToken = localStorage.getItem('token') || '';
+    const fromCurrentSession = !sentToken || sentToken === storedToken;
+
+    if (error.response?.status === 401 && !isAuthEndpoint && fromCurrentSession) {
       const hadSession = hasStoredSession();
       clearSession();
 

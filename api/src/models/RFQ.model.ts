@@ -351,7 +351,7 @@ const RFQSchema = new Schema<IRFQ>({
 // fails validation and the hook never runs at all.
 RFQSchema.pre('validate', async function () {
   if (this.isNew && !this.rfqNumber) {
-    this.rfqNumber = await nextNumber(this, { type: 'rfq', prefix: 'RFQ' });
+    this.rfqNumber = await nextNumber(this, { type: 'rfq', prefix: 'RFQ', field: 'rfqNumber' });
   }
 });
 

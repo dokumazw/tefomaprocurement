@@ -4,6 +4,7 @@ import cors from 'cors';
 import connectToDatabase from './config/db.js';
 import { corsOptions, applyCorsHeaders } from './config/cors.js';
 import { sbuContextMiddleware } from './middleware/sbuContext.middleware.js';
+import { keepRawErrorsOffScreen } from './middleware/safeErrors.middleware.js';
 import sbuDirectoryRoutes from './routes/sbuDirectory.route.js';
 import internalRoutes from './routes/internal.route.js';
 import { getAppEnv } from './config/env.js';
@@ -23,6 +24,8 @@ export function createApp(): Express {
   app.options('*', cors(corsOptions));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  // Before any route, so every reply passes through it.
+  app.use(keepRawErrorsOffScreen);
 
   app.get('/health', (_req: Request, res: Response) => {
     // `environment` makes it possible to confirm which deployment answered —
